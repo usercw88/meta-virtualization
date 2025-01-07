@@ -13,6 +13,7 @@ RDEPENDS:${PN} = "util-linux util-linux-unshare iptables \
                   ca-certificates \
                  "
 RDEPENDS:${PN} += "virtual-containerd ${VIRTUAL-RUNTIME_container_runtime}"
+RDEPENDS:${PN} += "docker-buildx-plugin"
 
 RRECOMMENDS:${PN} = "kernel-module-dm-thin-pool kernel-module-nf-nat kernel-module-nf-conntrack-netlink kernel-module-xt-addrtype kernel-module-xt-masquerade"
 
@@ -62,7 +63,6 @@ do_compile() {
 	mkdir -p .gopath/src/github.com/docker
 	ln -sf ${WORKDIR}/git/libnetwork .gopath/src/github.com/docker/libnetwork
 	ln -sf ${WORKDIR}/git/cli .gopath/src/github.com/docker/cli
-	ln -sf ${WORKDIR}/git/buildx .gopath/src/github.com/docker/buildx
 
 	export GOPATH="${S}/src/import/.gopath:${S}/src/import/vendor"
 	export GOROOT="${STAGING_DIR_NATIVE}/${nonarch_libdir}/${HOST_SYS}/go"
@@ -95,15 +95,12 @@ do_compile() {
 	# build the proxy
 	cd ${S}/src/import/.gopath/src/github.com/docker/libnetwork
 	oe_runmake cross-local
-
-	# build the buildx
-	cd ${S}/src/import/.gopath/src/github.com/docker/buildx
-	VERSION="${DOCKER_VERSION}" DOCKER_GITCOMMIT="${DOCKER_COMMIT}" make build
 }
 
 do_install() {
 	mkdir -p ${D}/${bindir}
-	cp ${WORKDIR}/git/cli/build/docker ${D}/${bindir}/docker
+	install -m 0755 ${WORKDIR}/git/cli/build/docker ${D}/${bindir}/docker
+	# cp ${WORKDIR}/git/cli/build/docker ${D}/${bindir}/docker
 	cp ${S}/src/import/bundles/dynbinary-daemon/dockerd ${D}/${bindir}/dockerd
 	cp ${WORKDIR}/git/libnetwork/bin/docker-proxy* ${D}/${bindir}/docker-proxy
 
@@ -127,10 +124,6 @@ do_install() {
 
 	mkdir -p ${D}${datadir}/docker/
 	install -m 0755 ${S}/src/import/contrib/check-config.sh ${D}${datadir}/docker/
-
-	mkdir -p ${D}/${libexecdir}/docker/cli-plugins
-	cp ${WORKDIR}/git/buildx/bin/build/docker-buildx ${D}/${libexecdir}/docker/cli-plugins/docker-buildx
-	install -d ${D}/${libexecdir}/docker/cli-plugins
 }
 
 
@@ -159,12 +152,12 @@ FILES:${PN}-contrib += "${datadir}/docker/check-config.sh"
 RDEPENDS:${PN}-contrib += "bash"
 
 # By the docker-packaging repository and https://docs.docker.com/engine/install/centos/#installation-methods
-# docker is packaged by most distros with a split between the engine, the CLI and the buildx plugin.
+# docker is packaged by most distros with a split between the engine and the CLI.
 #
-# We do the same here, by introducing the -cli and -buildx-plugin package
+# We do the same here, by introducing the -cli package
 #
 # But to keep existing use cases working, we also create a RDEPENDS between the main
-# docker package (the engine) and the cli/buildx plugin, so existing "docker" package installs will
+# docker package (the engine) and the cli, so existing "docker" package installs will
 # continue to work the same way. To have separate and non-redepending packages created
 # set the DOCKER_UNIFIED_PACKAGE variable to False
 #
@@ -176,6 +169,3 @@ FILES:${PN}-cli += "${bindir}/docker"
 DOCKER_UNIFIED_PACKAGE ?= "True"
 RDEPENDS:${PN} += "${@bb.utils.contains("DOCKER_UNIFIED_PACKAGE", "True", "${PN}-cli", "", d)}"
 
-PACKAGES =+ "${PACKAGE_NAME}-buildx-plugin"
-FILES:${PACKAGE_NAME}-buildx-plugin += "${libexecdir}/docker/cli-plugins/docker-buildx"
-RDEPENDS:${PN} += "${PACKAGE_NAME}-buildx-plugin"
